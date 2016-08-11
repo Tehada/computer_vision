@@ -134,7 +134,7 @@ def Pyramid(red, green, blue):
     t_red = resize(red, (new_size, int(red.shape[1] * new_size / red.shape[0])))
     t_green = resize(green, (new_size, int(green.shape[1] * new_size / green.shape[0])))
     t_blue = resize(blue, (new_size, int(blue.shape[1] * new_size / blue.shape[0])))
-    crops_1 = Pyramid(t_red, t_green, t_blue, count)
+    crops_1 = Pyramid(t_red, t_green, t_blue)
     for i in range(3):
         for j in range(4):
             crops_1[i][j] *= 2
