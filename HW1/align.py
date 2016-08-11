@@ -1,9 +1,7 @@
-%matplotlib inline
-from numpy import array, dstack, roll
-from skimage.transform import rescale, resize
+from numpy import array, dstack
+from skimage.transform import resize
 
 SHIFT = 15
-COUNT = 0
 
 def Crop_percents(image, percentage):
     height = image.shape[0]
@@ -78,7 +76,6 @@ def MSE_overlay(image_1, image_2, shift):
                 min_metric = temp_metric
                 shift_x = x
                 shift_y = y
-    print('finish')
     return [shift_x, shift_y]
 
 def CC_overlay(image_1, image_2, shift):
@@ -92,7 +89,6 @@ def CC_overlay(image_1, image_2, shift):
                 max_metric = temp_metric
                 shift_x = x
                 shift_y = y
-    print('finish')
     return [shift_x, shift_y]
 
 def Find_rgb_crops(red, green, blue, shift):
@@ -134,33 +130,22 @@ def Crop_pixels_2(red, green, blue, red_crops, green_crops, blue_crops):
 def Pyramid(red, green, blue):
     if red.shape[0] < 500:
         return Find_rgb_crops(red, green, blue, SHIFT)
-
-#Уменьшение изображений вдвое
     new_size = red.shape[0] // 2
     t_red = resize(red, (new_size, int(red.shape[1] * new_size / red.shape[0])))
     t_green = resize(green, (new_size, int(green.shape[1] * new_size / green.shape[0])))
     t_blue = resize(blue, (new_size, int(blue.shape[1] * new_size / blue.shape[0])))
-    
-#Запуск рекурсии
     crops_1 = Pyramid(t_red, t_green, t_blue, count)
-    
-#Промежуточное объединение каналов
     n_red = Crop_pixels(t_red, crops_1[0][0], crops_1[0][1], crops_1[0][2], crops_1[0][3])
     n_green = Crop_pixels(t_green, crops_1[1][0], crops_1[1][1], crops_1[1][2], crops_1[1][3])
     n_blue = Crop_pixels(t_blue, crops_1[2][0], crops_1[2][1], crops_1[2][2], crops_1[2][3])
     image = dstack((n_blue, n_green, n_red))
-    
-#Удвоение обрезков для исходной картинки
     for i in range(3):
         for j in range(4):
             crops_1[i][j] *= 2
-
     n_red = Crop_pixels(red, crops_1[0][0], crops_1[0][1], crops_1[0][2], crops_1[0][3])
     n_green = Crop_pixels(green, crops_1[1][0], crops_1[1][1], crops_1[1][2], crops_1[1][3])
     n_blue = Crop_pixels(blue, crops_1[2][0], crops_1[2][1], crops_1[2][2], crops_1[2][3])
     image = dstack((n_blue, n_green, n_red))
-            
-#Создание временных изображения для сдвига на 1 пиксель
     t_red = Crop_pixels(red, crops_1[0][0], crops_1[0][1], crops_1[0][2], crops_1[0][3])
     t_green = Crop_pixels(green, crops_1[1][0], crops_1[1][1], crops_1[1][2], crops_1[1][3])
     t_blue = Crop_pixels(blue, crops_1[2][0], crops_1[2][1], crops_1[2][2], crops_1[2][3])
