@@ -45,7 +45,6 @@ def Divide(image):
     return [red_channel, green_channel, blue_channel]
 
 def MSE(image_1, image_2):
-#    print('we are in MSE')
     height = image_1.shape[0]
     width = image_1.shape[1]
     total = 0
@@ -69,19 +68,16 @@ def CC(image_1, image_2):
     return sum_1 / (sum_2 * sum_3)
 
 def MSE_overlay(image_1, image_2, shift):
-    print('we are in MSE overlay')
     min_metric = MSE(image_1, image_2)
     shift_x = 0
     shift_y = 0
     for y in range(-shift, shift + 1):
         for x in range(-shift, shift + 1):
             temp_metric = MSE(Crop_pixels(image_1, x, y, 0, 0), Crop_pixels(image_2, 0, 0, x, y))
-#            print('temp_metric =', temp_metric)
             if temp_metric < min_metric:
                 min_metric = temp_metric
                 shift_x = x
                 shift_y = y
-                print('min_metric =', int(min_metric))
     print('finish')
     return [shift_x, shift_y]
 
@@ -92,12 +88,10 @@ def CC_overlay(image_1, image_2, shift):
     for y in range(-shift, shift + 1):
         for x in range(-shift, shift + 1):
             temp_metric = CC(Crop_pixels(image_1, x, y, 0, 0), Crop_pixels(image_2, 0, 0, x, y))
-#            print('temp_metric =', temp_metric)
             if temp_metric > max_metric:
                 max_metric = temp_metric
                 shift_x = x
                 shift_y = y
-                print('max_metric =', max_metric)
     print('finish')
     return [shift_x, shift_y]
 
@@ -137,9 +131,7 @@ def Crop_pixels_2(red, green, blue, red_crops, green_crops, blue_crops):
                                   blue_crops[2],
                                   blue_crops[3])]
 
-def Pyramid(red, green, blue, count):
-    count += 1
-    print(count)
+def Pyramid(red, green, blue):
     if red.shape[0] < 500:
         return Find_rgb_crops(red, green, blue, SHIFT)
 
@@ -157,54 +149,35 @@ def Pyramid(red, green, blue, count):
     n_green = Crop_pixels(t_green, crops_1[1][0], crops_1[1][1], crops_1[1][2], crops_1[1][3])
     n_blue = Crop_pixels(t_blue, crops_1[2][0], crops_1[2][1], crops_1[2][2], crops_1[2][3])
     image = dstack((n_blue, n_green, n_red))
-#    io.imsave('/home/tehada/cvintro2016/hw-01/egg_python/photo' + str(count) + '.png', image)
     
 #Удвоение обрезков для исходной картинки
-    for channel in crops_1:
-        for frame in channel:
-            frame *= 2
+    for i in range(3):
+        for j in range(4):
+            crops_1[i][j] *= 2
 
+    n_red = Crop_pixels(red, crops_1[0][0], crops_1[0][1], crops_1[0][2], crops_1[0][3])
+    n_green = Crop_pixels(green, crops_1[1][0], crops_1[1][1], crops_1[1][2], crops_1[1][3])
+    n_blue = Crop_pixels(blue, crops_1[2][0], crops_1[2][1], crops_1[2][2], crops_1[2][3])
+    image = dstack((n_blue, n_green, n_red))
+            
 #Создание временных изображения для сдвига на 1 пиксель
     t_red = Crop_pixels(red, crops_1[0][0], crops_1[0][1], crops_1[0][2], crops_1[0][3])
     t_green = Crop_pixels(green, crops_1[1][0], crops_1[1][1], crops_1[1][2], crops_1[1][3])
     t_blue = Crop_pixels(blue, crops_1[2][0], crops_1[2][1], crops_1[2][2], crops_1[2][3])
     crops_2 = Find_rgb_crops(t_red, t_green, t_blue, 1)
-    t_crops = [0, 0, 0, 0]
-    crops = []
-    
-#Сложение полученных обрезков
+    crops = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
     for i in range(3):
         for j in range(4):
-            t_crops[j] = crops_1[i][j] + crops_2[i][j]
-        crops.append(t_crops)
+            crops[i][j] = crops_1[i][j] + crops_2[i][j]
     return crops
 
 def align(bgr_image):
     channels = Divide(bgr_image)
     for i in range(3):
         channels[i] = Crop_percents(channels[i], 5)
-        io.imsave('/home/tehada/cvintro2016/hw-01/egg_python/divimg' + str(i) + '.png', channels[i])
-    print('hi!')
-    count = 0
-    h = channels[0].shape[0] // 8
-    l = channels[0].shape[1] // 8
-
-#    print('MSE rg1 =', MSE(channels[0], channels[1]))
-#    print(channels[0], '\n----\n', channels[1], '\n--------\n')
-    
-    channels[0] = resize(channels[0], (297, 359))
-    channels[1] = resize(channels[1], (297, 359))
-    channels[2] = resize(channels[2], (297, 359))
-    
-#    print('MSE rg2 =', MSE(channels[0], channels[1]))
-#    print(channels[0], '\n----\n', channels[1])
-    
-    crops = Pyramid(channels[0], channels[1], channels[2], count)
+    crops = Pyramid(channels[0], channels[1], channels[2])
     red = Crop_pixels(channels[0], crops[0][0], crops[0][1], crops[0][2], crops[0][3])
     green = Crop_pixels(channels[1], crops[1][0], crops[1][1], crops[1][2], crops[1][3])
     blue = Crop_pixels(channels[2], crops[2][0], crops[2][1], crops[2][2], crops[2][3])
-#    io.imsave('/home/tehada/cvintro2016/hw-01/egg_python/2red1.png', red)
-#    io.imsave('/home/tehada/cvintro2016/hw-01/egg_python/2green1.png', green)
-#    io.imsave('/home/tehada/cvintro2016/hw-01/egg_python/2blue1.png', blue)
     bgr_image = dstack((blue, green, red))
     return bgr_image
