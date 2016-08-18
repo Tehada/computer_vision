@@ -1,5 +1,6 @@
-from numpy import array, dstack
+import numpy as np
 from skimage.transform import resize
+from skimage import img_as_ubyte
 
 SHIFT = 15
 
@@ -45,11 +46,7 @@ def Divide(image):
 def MSE(image_1, image_2):
     height = image_1.shape[0]
     width = image_1.shape[1]
-    total = 0
-    for y in range(height):
-        for x in range(width):
-            value = (float(image_1[y][x]) - float(image_2[y][x])) ** 2
-            total += value
+    total = ((np.int16(image_1) - np.int16(image_2)) ** 2).sum()
     return total / (width * height)
 
 def CC(image_1, image_2):
@@ -91,9 +88,13 @@ def CC_overlay(image_1, image_2, shift):
                 shift_y = y
     return [shift_x, shift_y]
 
-def Find_rgb_crops(red, green, blue, shift):
-    rg = MSE_overlay(red, green, shift)
-    rb = MSE_overlay(red, blue, shift)
+def Find_rgb_crops(red, green, blue, shift, metric):
+    if metric == 'mse':
+        rg = MSE_overlay(red, green, shift)
+        rb = MSE_overlay(red, blue, shift)
+    elif metric == 'cc':
+        rg = CC_overlay(red, green, shift)
+        rb = CC_overlay(red, blue, shift)
     height = red.shape[0]
     width = red.shape[1]
     red_corners = [[0, 0], [width - 1, 1 - height]]
@@ -112,24 +113,11 @@ def Find_rgb_crops(red, green, blue, shift):
 
     blue_frame = [final_corners[0][0] - rb[0], height + (final_corners[1][1] - rb[1]) - 1,
                  width - (final_corners[1][0] - rb[0]) - 1, -(final_corners[0][1] - rb[1])]
-
     return [red_frame, green_frame, blue_frame]
 
-def Crop_pixels_2(red, green, blue, red_crops, green_crops, blue_crops):
-    return [Crop_pixels(red, red_crops[0], red_crops[1],
-                             red_crops[2], red_crops[3]),
-            Crop_pixels(green, green_crops[0],
-                                   green_crops[1],
-                                   green_crops[2],
-                                   green_crops[3]),
-            Crop_pixels(blue, blue_crops[0],
-                                  blue_crops[1],
-                                  blue_crops[2],
-                                  blue_crops[3])]
-
-def Pyramid(red, green, blue):
+def Pyramid(red, green, blue, metric):
     if red.shape[0] < 500:
-        return Find_rgb_crops(red, green, blue, SHIFT)
+        return Find_rgb_crops(red, green, blue, SHIFT, metric)
     new_size = red.shape[0] // 2
     t_red = resize(red, (new_size, int(red.shape[1] * new_size / red.shape[0])))
     t_green = resize(green, (new_size, int(green.shape[1] * new_size / green.shape[0])))
@@ -141,20 +129,21 @@ def Pyramid(red, green, blue):
     t_red = Crop_pixels(red, crops_1[0][0], crops_1[0][1], crops_1[0][2], crops_1[0][3])
     t_green = Crop_pixels(green, crops_1[1][0], crops_1[1][1], crops_1[1][2], crops_1[1][3])
     t_blue = Crop_pixels(blue, crops_1[2][0], crops_1[2][1], crops_1[2][2], crops_1[2][3])
-    crops_2 = Find_rgb_crops(t_red, t_green, t_blue, 1)
+    crops_2 = Find_rgb_crops(t_red, t_green, t_blue, 1, metric)
     crops = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
     for i in range(3):
         for j in range(4):
             crops[i][j] = crops_1[i][j] + crops_2[i][j]
     return crops
 
-def align(bgr_image):
+def align(bgr_image, metric = 'mse'):
+    bgr_image = img_as_ubyte(bgr_image)
     channels = Divide(bgr_image)
     for i in range(3):
         channels[i] = Crop_percents(channels[i], 5)
-    crops = Pyramid(channels[0], channels[1], channels[2])
+    crops = Pyramid(channels[0], channels[1], channels[2], metric)
     red = Crop_pixels(channels[0], crops[0][0], crops[0][1], crops[0][2], crops[0][3])
     green = Crop_pixels(channels[1], crops[1][0], crops[1][1], crops[1][2], crops[1][3])
     blue = Crop_pixels(channels[2], crops[2][0], crops[2][1], crops[2][2], crops[2][3])
-    bgr_image = dstack((blue, green, red))
+    bgr_image = np.dstack((blue, green, red))
     return bgr_image

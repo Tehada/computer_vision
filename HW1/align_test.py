@@ -14,6 +14,6 @@ input_dir = argv[1]
 output_dir = argv[2]
 
 for filename in iglob(input_dir + '/*.png'):
-    img = imread(filename)
+    img = imread(filename, plugin='matplotlib')
     img = align(img)
     imsave(output_dir + '/' + basename(filename), img)
