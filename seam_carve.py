@@ -16,7 +16,7 @@ def Energy(yuv_image):
     y[1:-1,:] = yuv_image[2:,:] - yuv_image[:-2,:]
     y[-1:,:] = yuv_image[-1:,:] - yuv_image[-2:-1,:]
     return np.uint8((x ** 2 + y ** 2) ** 0.5)
-    
+ 
 def Find_min_index(h, w, image):
     if w == 0:
         if image[h][w] <= image[h][w + 1]:
@@ -41,9 +41,8 @@ def Find_seam(image, mode, mask):
     yuv = YUV(image)
     energy_image = Energy(yuv)
     energy_image = np.int64(energy_image)
-    
+    mask = np.int64(mask)
     if mask is not None:
-        mask = np.int64(mask)
         energy_image += mask * mask.size * 256
     height = image.shape[0]
     width = image.shape[1]
@@ -62,25 +61,28 @@ def Find_seam(image, mode, mask):
         #for w in range(width):
             #matrix[h][w] = int(Find_min_cell(h - 1, w, matrix)) + energy_image[h][w]
     #print('find seam after for -', time.time() - start)
-    min_cell = matrix[height - 1][width - 1]
-    min_index = width - 1
-    for w in range(width - 1, -1, -1):
-        if matrix[height - 1][w] <= min_cell:
-            min_cell = matrix[height - 1][w]
-            min_index = w
-    print(min_index)
+    #print(matrix[-1][674], matrix[-1][675], matrix[-1][676])
+
+    min_index = np.argmin(matrix[-1])
+    min_cell = matrix[-1][min_index]
+    #print(min_index)
     #print('find seam after cell -', time.time() - start)
     min_cells = [min_index]
     for h in range(height - 1, 0, -1):
         min_index = Find_min_index(h - 1, min_index, matrix)
         min_cells.append(min_index)
     #print('find seam -', time.time() - start)
+    print(matrix[414])
+    for h in range(height):
+        if height - h - 1 == 414:
+            print(height - h - 1, min_cells[h])
+            print(matrix[414][min_cells[h]], matrix[414][min_cells[h]+1])
     return min_cells
 
 def seam_carve(image, mode, mask=None):
     #start = time.time()
     if mask is None:
-        min_seam = Find_seam(image, mode, mask)
+        min_seam = Find_seam(image, mode)
         height = image.shape[0]
         width = image.shape[1]
         if 'vertical' in mode:
