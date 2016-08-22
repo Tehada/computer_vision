@@ -2,7 +2,7 @@ import numpy as np
 from skimage.transform import resize
 from skimage import img_as_ubyte
 
-SHIFT = 15
+SHIFT = 18
 
 def Crop_percents(image, percentage):
     height = image.shape[0]
@@ -44,23 +44,13 @@ def Divide(image):
     return [red_channel, green_channel, blue_channel]
 
 def MSE(image_1, image_2):
-    height = image_1.shape[0]
-    width = image_1.shape[1]
-    total = ((np.int16(image_1) - np.int16(image_2)) ** 2).sum()
-    return total / (width * height)
+    return ((np.int16(image_1) - np.int16(image_2)) ** 2).sum() / (image_1.shape[0] * image_1.shape[1])
 
 def CC(image_1, image_2):
-    height = image_1.shape[0]
-    width = image_1.shape[1]
-    sum_1 = 0
-    sum_2 = 0
-    sum_3 = 0
-    for y in range(height):
-        for x in range(width):
-            sum_1 += int(image_1[y][x]) * int(image_2[y][x])
-            sum_2 += int(image_1[y][x])
-            sum_3 += int(image_2[y][x])
-    return sum_1 / (sum_2 * sum_3)
+    image_1 = np.float64(image_1)
+    image_2 = np.float64(image_2)
+    return round((image_1 * image_2).sum() /
+                 (image_1.sum() * image_2.sum()) * image_1.shape[0] * image_1.shape[1], 4)
 
 def MSE_overlay(image_1, image_2, shift):
     min_metric = MSE(image_1, image_2)
@@ -82,7 +72,7 @@ def CC_overlay(image_1, image_2, shift):
     for y in range(-shift, shift + 1):
         for x in range(-shift, shift + 1):
             temp_metric = CC(Crop_pixels(image_1, x, y, 0, 0), Crop_pixels(image_2, 0, 0, x, y))
-            if temp_metric > max_metric:
+            if temp_metric - max_metric > 0.0005:
                 max_metric = temp_metric
                 shift_x = x
                 shift_y = y
@@ -119,10 +109,10 @@ def Pyramid(red, green, blue, metric):
     if red.shape[0] < 500:
         return Find_rgb_crops(red, green, blue, SHIFT, metric)
     new_size = red.shape[0] // 2
-    t_red = resize(red, (new_size, int(red.shape[1] * new_size / red.shape[0])))
-    t_green = resize(green, (new_size, int(green.shape[1] * new_size / green.shape[0])))
-    t_blue = resize(blue, (new_size, int(blue.shape[1] * new_size / blue.shape[0])))
-    crops_1 = Pyramid(t_red, t_green, t_blue)
+    t_red = resize(red, (new_size, int(red.shape[1] * new_size / red.shape[0])), preserve_range=True)
+    t_green = resize(green, (new_size, int(green.shape[1] * new_size / green.shape[0])), preserve_range=True)
+    t_blue = resize(blue, (new_size, int(blue.shape[1] * new_size / blue.shape[0])), preserve_range=True)
+    crops_1 = Pyramid(t_red, t_green, t_blue, metric)
     for i in range(3):
         for j in range(4):
             crops_1[i][j] *= 2
@@ -136,7 +126,7 @@ def Pyramid(red, green, blue, metric):
             crops[i][j] = crops_1[i][j] + crops_2[i][j]
     return crops
 
-def align(bgr_image, metric = 'mse'):
+def align(bgr_image, metric = 'cc'):
     bgr_image = img_as_ubyte(bgr_image)
     channels = Divide(bgr_image)
     for i in range(3):
