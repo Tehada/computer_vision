@@ -1,74 +1,21 @@
-%matplotlib inline
 import numpy as np
-from skimage import data, io
-import pylab
+from functools import reduce
 
-pylab.rcParams['figure.figsize'] = (7.0, 7.0)
+def YUV(image):
+    return np.float64(image[:,:,:1] * 0.299 + image[:,:,1:2] * 0.587 + image[:,:,2:] * 0.114).reshape(image.shape[:2])
 
-PATH = '/home/tehada/cvintro2016/hw-02/egg_python/sea2.jpg'
-
-def seam_carve(img, mode, mask=None):
-    # dummy implementation — delete rightmost column of image
-    resized_img = img[:, :-1, :]
-    if mask is None:
-        resized_mask = None
-    else:
-        resized_mask = mask[:, :-1]
-
-    carve_mask = np.zeros(img.shape[0:2])
-    carve_mask[:, -1] = 1
-    return (resized_img, resized_mask, carve_mask)
-
-def Convert_to_YUV(image):
-    height = image.shape[0]
-    width = image.shape[1]
-    YUV_image = np.zeros((height, width))
-    for h in range(height):
-        for w in range(width):
-            YUV_image[h][w] = int(image[h][w][0] * 0.299
-                                + image[h][w][1] * 0.587
-                                + image[h][w][2] * 0.114)
-    YUV_image = np.uint8(YUV_image)
-    return YUV_image
-
-#сделать нормальное конвертирование
-def X_derivative(h, w, image):
-    width = image.shape[1]
-    if w == 0:
-        return int(image[h][w + 1]) - int(image[h][w])
-    elif w == width - 1:
-        return int(image[h][w]) - int(image[h][w - 1])
-    else:
-        return int(image[h][w + 1]) - int(image[h][w - 1])
-
-#тоже
-def Y_derivative(h, w, image):
-    height = image.shape[0]
-    if h == 0:
-        return int(image[h + 1][w]) - int(image[h][w])
-    elif h == height - 1:
-        return int(image[h][w]) - int(image[h - 1][w])
-    else:
-        return int(image[h + 1][w]) - int(image[h - 1][w])
-
-def Count_energy(YUV_image):
-    height = YUV_image.shape[0]
-    width = YUV_image.shape[1]
-    energy_image = np.zeros((height, width))
-    for h in range(height):
-        for w in range(width):              
-            energy_image[h][w] = int(X_derivative(h, w, YUV_image) ** 2 + (Y_derivative(h, w, YUV_image)) ** 2) ** 0.5
-    energy_image = np.uint8(energy_image)
-    return energy_image
-
-def Find_min_cell(h, w, image):
-    if w == 0:
-        return min(image[h][w], image[h][w + 1])
-    elif w == image.shape[1] - 1:
-        return min(image[h][w - 1], image[h][w])
-    else:
-        return min(image[h][w - 1], min(image[h][w], image[h][w + 1]))
-    
+def Energy(yuv_image):
+    yuv_image = np.float64(yuv_image)
+    x = np.empty((yuv_image.shape[:2]), dtype=np.float64)
+    y = np.empty((yuv_image.shape[:2]), dtype=np.float64)
+    x[:,:1] = yuv_image[:,1:2] - yuv_image[:,:1]
+    x[:,1:-1] = yuv_image[:,2:] - yuv_image[:,:-2]
+    x[:,-1:] = yuv_image[:,-1:] - yuv_image[:,-2:-1]
+    y[:1,:] = yuv_image[1:2,:] - yuv_image[:1,:]
+    y[1:-1,:] = yuv_image[2:,:] - yuv_image[:-2,:]
+    y[-1:,:] = yuv_image[-1:,:] - yuv_image[-2:-1,:]
+    return np.float64((x ** 2 + y ** 2) ** 0.5)
+ 
 def Find_min_index(h, w, image):
     if w == 0:
         if image[h][w] <= image[h][w + 1]:
@@ -88,40 +35,96 @@ def Find_min_index(h, w, image):
         else:
             return w + 1
 
-def Find_seam(energy_image):
-    height = energy_image.shape[0]
-    width = energy_image.shape[1]
-    matrix = np.int32(np.zeros((height, width)))
+def Find_seam(image, mode, mask):
+    yuv = YUV(image)
+    energy_image = Energy(yuv)
+    energy_image = np.float64(energy_image)
+    if mask is not None:
+        mask = np.int64(mask)
+        energy_image += mask * mask.size * 256
+    height = image.shape[0]
+    width = image.shape[1]
+    if 'vertical' in mode:
+        height, width = width, height
+        energy_image = energy_image.transpose()
+    matrix = np.float64(np.zeros((height, width)))
     matrix[0] = energy_image[0]
     for h in range(1, height):
-        for w in range(width):
-            matrix[h][w] = int(Find_min_cell(h - 1, w, energy_image)) + matrix[h - 1][w]
-    min_cell = matrix[h - 1][w - 1]
-    min_index = width - 1
-    for w in range(width - 1, -1, -1):
-        if matrix[height - 1][w] <= min_cell:
-            min_cell = matrix[height - 1][w]
-            min_index = w
+        matrix[h][0] = min(matrix[h - 1][0], matrix[h - 1][1]) + energy_image[h][0]
+        matrix[h][1:-1] = np.minimum.reduce([matrix[h - 1][0:-2],
+                                             matrix[h - 1][1:-1],
+                                             matrix[h - 1][2:]]) + energy_image[h][1:-1]
+        matrix[h][-1] = min(matrix[h - 1][-2], matrix[h - 1][-1]) + energy_image[h][-1]
+    min_index = np.argmin(matrix[-1])
+    min_cell = matrix[-1][min_index]
     min_cells = [min_index]
     for h in range(height - 1, 0, -1):
         min_index = Find_min_index(h - 1, min_index, matrix)
         min_cells.append(min_index)
     return min_cells
 
-def Delete_seam(image, cells):
-    height = image.shape[0]
-    width = image.shape[1]
-    new_image = np.empty((height, width - 1, 3))
-    for h in range(height - 1, -1, -1):
-        new_image[h] = np.delete(image[h], cells[height - h - 1], 0)
-    return np.uint8(new_image)
-
-def Crop(image, pixels):
-    for i in range(pixels):
-        YUV_image = Convert_to_YUV(image)
-        energy_image = Count_energy(YUV_image)
-        io.imshow(energy_image)
-        seam = Find_seam(energy_image)
-        image = Delete_seam(image, seam)
-        print(i)
-    return image
+def seam_carve(image, mode, mask=None):
+    if mask is None:
+        min_seam = Find_seam(image, mode, mask)
+        height = image.shape[0]
+        width = image.shape[1]
+        if 'vertical' in mode:
+            height, width = width, height
+            image = image.transpose(1, 0, 2)
+        if 'shrink' in mode:
+            new_image = np.empty((height, width - 1, 3))
+        else:
+            new_image = np.empty((height, width + 1, 3))
+        carve_mask = np.zeros((height, width))
+        for h in range(height - 1, -1, -1):
+            if 'shrink' in mode:
+                new_image[h] = np.delete(image[h], min_seam[height - h - 1], 0)
+            else:
+                if width - 1 in min_seam:
+                    mid = np.uint8((np.int16(image[h][min_seam[height - h - 1]])
+                             + np.int16(image[h][min_seam[height - h - 1] - 1])) // 2)
+                else:
+                    mid = np.uint8((np.int16(image[h][min_seam[height - h - 1]])
+                             + np.int16(image[h][min_seam[height - h - 1] + 1])) // 2)
+                new_image[h] = np.insert(image[h], min_seam[height - h - 1], mid, 0)
+            carve_mask[h][min_seam[height - h - 1]] = 1
+        if 'vertical' in mode:
+            new_image = new_image.transpose(1, 0, 2)
+            carve_mask = carve_mask.transpose()
+        return (np.uint8(new_image), None, carve_mask)
+    else:
+        min_seam = Find_seam(image, mode, mask)
+        height = image.shape[0]
+        width = image.shape[1]
+        if 'vertical' in mode:
+            height, width = width, height
+            image = image.transpose(1, 0, 2)
+            mask = mask.transpose()
+        if 'shrink' in mode:
+            new_image = np.empty((height, width - 1, 3))
+            new_mask = np.empty((height, width - 1))
+        else:
+            new_image = np.empty((height, width + 1, 3))
+            new_mask = np.empty((height, width + 1))
+        carve_mask = np.zeros((height, width))
+        for h in range(height - 1, -1, -1):
+            if 'shrink' in mode:
+                new_image[h] = np.delete(image[h], min_seam[height - h - 1], 0)
+                new_mask[h] = np.delete(mask[h], min_seam[height - h - 1], 0)
+            else:
+                if width - 1 in min_seam:
+                    mid = np.uint8((np.int16(image[h][min_seam[height - h - 1]])
+                             + np.int16(image[h][min_seam[height - h - 1] - 1])) // 2)
+                else:
+                    mid = np.uint8((np.int16(image[h][min_seam[height - h - 1]])
+                             + np.int16(image[h][min_seam[height - h - 1] + 1])) // 2)
+                new_image[h] = np.insert(image[h], min_seam[height - h - 1], mid, 0)
+                new_mask[h] = np.insert(mask[h], min_seam[height - h - 1], 1, 0)
+                new_mask[h][min_seam[height - h - 1] + 1] = 1
+                new_mask[h][min_seam[height - h - 1] - 1] = 1
+            carve_mask[h][min_seam[height - h - 1]] = 1
+        if 'vertical' in mode:
+            new_image = new_image.transpose(1, 0, 2)
+            new_mask = new_mask.transpose()
+            carve_mask = carve_mask.transpose()
+        return (np.uint8(new_image), new_mask, carve_mask)
